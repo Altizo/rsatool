@@ -15,6 +15,10 @@ Requirements
 Usage examples
 --------------
 
+Restore private exponent from part HEX and modulus
+
+    python rsatool.py -n 2345234523...23452345234 -d_start 0282....EFF94 -start_r 4096 -end_r 66000
+
 Supplying modulus and private exponent, PEM output to key.pem:
 
     python rsatool.py -f PEM -o key.pem -n 13826123222358393307 -d 9793706120266356337
