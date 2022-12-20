@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 import base64
 import argparse
 import random
@@ -17,6 +18,9 @@ PEM_TEMPLATE = (
 )
 
 DEFAULT_EXP = 65537
+
+
+clearConsole = lambda: os.system('cls' if os.name in ('nt', 'dos') else 'clear')
 
 
 def factor_modulus(n, d, e):
@@ -64,13 +68,15 @@ def factor_modulus(n, d, e):
 
 
 class RSA:
-    def __init__(self, p=None, q=None, n=None, d=None, e=DEFAULT_EXP):
+    def __init__(self, p=None, q=None, n=None, d=None, e=DEFAULT_EXP, d_start=None, start_r=0, end_r=None):
         """
         Initialize RSA instance using primes (p, q)
         or modulus and private exponent (n, d)
         """
-
         self.e = e
+        self.hex_start = d_start
+        self.start_range = start_r
+        self.end_range = end_r
 
         if p and q:
             assert gmpy2.is_prime(p), 'p is not prime'
@@ -80,9 +86,12 @@ class RSA:
             self.q = q
         elif n and d:
             self.p, self.q = factor_modulus(n, d, e)
+        elif d_start:
+            self.search_d()
         else:
-            raise ValueError('Either (p, q) or (n, d) must be provided')
+            raise ValueError('Either (p, q) or (n, d) or (d_start, start_r, end_r) must be provided')
 
+        
         self._calc_values()
 
     def _calc_values(self):
@@ -143,6 +152,49 @@ class RSA:
             print(parts('%x' % val, 80) + '\n')
 
 
+    def toHex(self,dec):
+        digits = '0123456789ABCDEF'
+        x = (dec % 16)
+        rest = dec // 16
+        if (rest == 0):
+            return digits[x]
+        return self.toHex(rest) + digits[x]
+
+
+    def gen_d(self):
+        hex_d_array = []
+        for variant in range(self.start_range,self.end_range,1):
+            hex_end = (self.toHex(int(variant)))
+            hex=self.hex_start+hex_end
+            hex_d_array.append(int(hex,16))
+        return hex_d_array
+        
+
+    def search_d(self):
+        array_d = self.gen_d()
+        for step, hex_d in enumerate(self.gen_d()):
+            clearConsole()
+            print('{}/{}        {}'.format(step+1,len(array_d),str(hex_d)[:7]+'...'+str(hex_d)[len(str(hex_d))-7:]))
+            try:
+                answer = factor_modulus(d=int(hex_d),n=int(self.n), e=int(self.e))
+                self.d = hex_d
+                print('-----------------XE-XE-XE-XE------------------privateExponent-d---')
+                print(hex_d)
+                print('----------------------------------------------prime1-p------------')
+                print(answer[0])
+                print('----------------------------------------------prime2-q------------')
+                print(answer[1])
+                print('------------------------------------------------------------------')
+                break
+            except:
+                pass
+        if self.d==None:
+            clearConsole()
+            print('-------SEARCH COMPLETE-------\n privatExponent - NOT FOUND!')
+
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
@@ -154,6 +206,12 @@ if __name__ == '__main__':
                         help='second prime number. format : int or 0xhex')
     parser.add_argument('-d', type=lambda x: int(x, 0),
                         help='private exponent. format : int or 0xhex')
+    parser.add_argument('-d_start', type=str,
+                        help='start string private exponent. format : string')
+    parser.add_argument('-start_r', type=lambda x: int(x, 0),
+                        help='start range d private exponent. format : int')
+    parser.add_argument('-end_r', type=lambda x: int(x, 0),
+                        help='end range d private exponent. format : int')
     parser.add_argument('-e', type=lambda x: int(x, 0),
                         help='public exponent (default: %d). format : int or 0xhex' %
                         DEFAULT_EXP, default=DEFAULT_EXP)
@@ -164,16 +222,19 @@ if __name__ == '__main__':
                         help='also display CRT-RSA representation')
 
     args = parser.parse_args()
-
+    print(args)
     if args.p and args.q:
         print('Using (p, q) to calculate RSA paramaters\n')
         rsa = RSA(p=args.p, q=args.q, e=args.e)
     elif args.n and args.d:
         print('Using (n, d) to calculate RSA parameters\n')
         rsa = RSA(n=args.n, d=args.d, e=args.e)
+    elif args.start_r and args.end_r:
+        print('Using (d_start, start_r, end_r) to calculate privatExponent\n')
+        rsa = RSA(d_start=args.d_start, start_r=args.start_r, end_r=args.end_r)
     else:
         parser.print_help()
-        parser.error('Either (p, q) or (n, d) needs to be specified')
+        parser.error('Either (p, q) or (n, d) or (d_start, start_r, end_r) needs to be specified')
 
     if args.format == 'DER' and not args.output:
         parser.error('Output filename (-o) required for DER output')
